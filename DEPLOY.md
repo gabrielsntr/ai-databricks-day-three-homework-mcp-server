@@ -290,15 +290,17 @@ databricks apps stop weather-dashboard -p $P
 Four things could not be checked without your workspace. Treat them as the places to look first
 if something misbehaves.
 
-**User attribution in the query log is probably not going to work.** `query_log` reads
-`x-forwarded-user` and `x-forwarded-email` to record who asked. Those header names come from the
-Day 3 reference project, and a search of the current Apps documentation turns up only one
-forwarded header, `x-forwarded-access-token`. They may exist and be undocumented, or they may not
-exist. If they do not, `requested_by` is null and nothing else changes, because the whole query
-log is optional. To make it work properly you would take the access token from
-`x-forwarded-access-token` and call the SCIM `Me` endpoint for the user's email, which costs one
-Databricks API call per tool call. That is a real cost for an optional feature, so it is not
-built.
+**User attribution records the caller, which for agent traffic is a service principal.** This was
+listed here as probably broken, on the grounds that the current Apps documentation mentions only
+`x-forwarded-access-token`. Measured against the running deployment, the headers `query_log`
+reads do arrive and `requested_by` is populated. What lands in it is the identity that called the
+app, and when the caller is the Agent Bricks agent that is the connection's service principal
+client ID, not the person who typed the question. Rows written by an agent therefore all carry
+the same value.
+
+Attributing a row to the human behind the agent would mean the agent forwarding the end user's
+identity to the tool call, which the MCP tool surface does not carry today. Direct browser
+traffic to the dashboard is a different matter and does identify the person.
 
 **Registering a Databricks App as an "external" MCP server is thinly documented.** The external
 MCP docs are written for third-party SaaS APIs. Your MCP server is an App in the same workspace,
