@@ -16,6 +16,11 @@ env:
     value: "nws-contact-email"
   - name: NWS_CONTACT_EMAIL
     value: "change-me@example.com"
-  # The query log is optional (see query_log.py). To turn it on, set LAKEBASE_SECRET_SCOPE and
-  # LAKEBASE_SECRET_KEY to a Databricks secret holding a Lakebase connection URL, or set
-  # LAKEBASE_URL directly for local development.
+  # The query log writes one row per tool call to the Lakebase table that
+  # schema_weather_queries.sql creates. The app's service principal needs READ on this scope. If
+  # the secret cannot be resolved the log turns itself off and no tool call is affected. For
+  # local development set LAKEBASE_URL directly instead.
+  - name: LAKEBASE_SECRET_SCOPE
+    value: "weather-mcp"
+  - name: LAKEBASE_SECRET_KEY
+    value: "lakebase-url"

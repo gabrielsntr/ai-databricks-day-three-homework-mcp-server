@@ -1,22 +1,27 @@
 # Weather agent transcripts
 
-The Agent Bricks agent itself is not deployed yet. Deploying it needs a Databricks workspace,
-which this environment cannot reach. So this file captures the half of the homework that does not
-need that workspace: for each of the six questions below, it shows the exact tool call the agent
-is expected to make (per `system_prompt.md`) and the exact response the MCP server returned, so a
-grader can check the agent's eventual prose against real numbers instead of trusting a paraphrase.
+The Agent Bricks agent is now deployed. These six scenarios were captured live on 2026-08-09
+against the deployed serving endpoint `mas-59b8c794-endpoint`, which fronts an Agent Bricks
+supervisor agent wired to the MCP server in `mcp_server/weather_mcp_server.py`. Each scenario
+below shows the real tool calls the agent made, the real MCP server response, and the agent's own
+final answer, quoted verbatim. Nothing here is a placeholder.
 
-How this was captured: the real server (`mcp_server/weather_mcp_server.py`) was started locally
-and driven over the actual streamable-HTTP MCP protocol, the same transport an Agent Bricks agent
-would use: a JSON-RPC `initialize`, a `notifications/initialized`, then `tools/call` requests,
-each with the `mcp-session-id` header from `initialize` and an `Accept: application/json,
-text/event-stream` header, parsing the SSE `data:` lines back into JSON. No tool function was
-called directly in-process. Captured on 2026-08-09, against the live Open-Meteo and NWS APIs, so
-every date and number below is real for that day and will not match a later run.
+The agent was asked each question in a fresh conversation, over the endpoint's `/invocations` API
+(not the Databricks chat UI). Two things about that transport are worth knowing before reading the
+transcripts:
 
-Each scenario below ends with an empty, clearly marked block. That is where the agent's own final
-prose answer goes once the agent is deployed and actually asked the question. Nothing has been
-written into those blocks; nobody should treat them as filled in.
+**Approval gating.** Databricks gates every MCP tool call behind an approval step. The agent emits
+an `mcp_approval_request` naming the tool and its arguments, and the caller must send back an
+`mcp_approval_response` approving that request before the tool actually runs and the result comes
+back. In the Databricks UI this shows up as a button to click; the driver script used here
+approves automatically so the conversation can run end to end. That is why "the agent called tool
+X with arguments Y" is accurate even though, mechanically, the call happens in two round trips.
+
+**Live, moving data.** Every number below came from the real Open-Meteo and NWS APIs at capture
+time on 2026-08-09. A later run of the same question, even minutes later, can return different
+numbers, because the forecast itself changes. Where a scenario was captured more than once during
+this session, the numbers differ slightly between attempts; only one capture per scenario is kept
+below, and everything in that scenario, prose and JSON alike, is from that one run.
 
 ---
 
@@ -24,14 +29,13 @@ written into those blocks; nobody should treat them as filled in.
 
 **Tools, in order:** `get_forecast` for Chicago, to learn the location's own local dates, then
 `get_umbrella_advice` with the second date from that list (today's date is the first entry,
-tomorrow is the second). This is the exact sequence `system_prompt.md` prescribes: the agent does
-not know today's date and must not assume one, so it reads the real dates back from the forecast
-before it can say what "tomorrow" means for this location.
+tomorrow is the second). This is the exact sequence `system_prompt.md` prescribes, and it is the
+sequence the deployed agent actually used.
 
 **Call 1**
 
 ```json
-{"name": "get_forecast", "arguments": {"location": "Chicago", "days": 3}}
+{"name": "get_forecast", "arguments": {"location": "Chicago", "days": 5}}
 ```
 
 **Response 1**
@@ -60,35 +64,49 @@ before it can say what "tomorrow" means for this location.
   "days": [
     {
       "date": "2026-08-09",
-      "conditions": "Moderate drizzle",
-      "temp_high_c": 31.2, "temp_high_f": 88.2,
+      "conditions": "Moderate rain",
+      "temp_high_c": 28.7, "temp_high_f": 83.7,
       "temp_low_c": 17.4, "temp_low_f": 63.3,
-      "precipitation_mm": 1.1, "precipitation_chance_pct": 30
+      "precipitation_mm": 4.0, "precipitation_chance_pct": 48
     },
     {
       "date": "2026-08-10",
-      "conditions": "Violent rain showers",
-      "temp_high_c": 28.6, "temp_high_f": 83.5,
-      "temp_low_c": 22.3, "temp_low_f": 72.1,
-      "precipitation_mm": 23.1, "precipitation_chance_pct": 35
+      "conditions": "Moderate rain showers",
+      "temp_high_c": 26.7, "temp_high_f": 80.1,
+      "temp_low_c": 22.2, "temp_low_f": 72.0,
+      "precipitation_mm": 20.2, "precipitation_chance_pct": 54
     },
     {
       "date": "2026-08-11",
-      "conditions": "Thunderstorm",
-      "temp_high_c": 29.1, "temp_high_f": 84.4,
-      "precipitation_mm": 20.27, "precipitation_chance_pct": 55
+      "conditions": "Moderate rain showers",
+      "temp_high_c": 25.4, "temp_high_f": 77.7,
+      "temp_low_c": 21.8, "temp_low_f": 71.2,
+      "precipitation_mm": 16.83, "precipitation_chance_pct": 55
+    },
+    {
+      "date": "2026-08-12",
+      "conditions": "Overcast",
+      "temp_high_c": 26.0, "temp_high_f": 78.8,
+      "temp_low_c": 20.6, "temp_low_f": 69.1,
+      "precipitation_mm": 0.0, "precipitation_chance_pct": 52
+    },
+    {
+      "date": "2026-08-13",
+      "conditions": "Moderate drizzle",
+      "temp_high_c": 28.1, "temp_high_f": 82.6,
+      "temp_low_c": 20.0, "temp_low_f": 68.0,
+      "precipitation_mm": 1.1, "precipitation_chance_pct": 18
     }
   ]
 }
 ```
 
-Trimmed: each day's `feels_like_high_c/f`, `wind_max_kmh/mph`, `wind_gust_max_kmh/mph`,
-`uv_index_max`, `sunrise`, and `sunset` fields are omitted above for readability; they carry no
-information this scenario needs. Nothing was trimmed from the `days` list itself, all 3 requested
-days are shown.
+Trimmed: each day's `weather_code`, `feels_like_high_c/f`, `precipitation_in`, `wind_max_kmh/mph`,
+`wind_gust_max_kmh/mph`, `uv_index_max`, `sunrise`, and `sunset` fields are omitted above for
+readability. Nothing was trimmed from the `days` list itself; all 5 requested days are shown.
 
 The first entry, `2026-08-09`, is today in Chicago's own time zone. Tomorrow is `2026-08-10`, the
-date passed to the next call.
+date the agent passed to the next call.
 
 **Call 2**
 
@@ -111,24 +129,24 @@ date passed to the next call.
   "advice": {
     "verdict": "yes",
     "confidence": "high",
-    "reason": "Expected precipitation is 23.1 mm.",
+    "reason": "Expected precipitation is 20.2 mm.",
     "rule_fired": "chance>=60_or_mm>=5.0",
     "wind_warning": false,
     "inputs_used": {
-      "precipitation_chance_pct": 35,
-      "precipitation_mm": 23.1,
-      "wind_max_kmh": 18.0,
-      "weather_code": 82
+      "precipitation_chance_pct": 54,
+      "precipitation_mm": 20.2,
+      "wind_max_kmh": 30.3,
+      "weather_code": 81
     }
   },
   "forecast_day": {
     "date": "2026-08-10",
-    "conditions": "Violent rain showers",
-    "temp_high_c": 28.6, "temp_high_f": 83.5,
-    "temp_low_c": 22.3, "temp_low_f": 72.1,
-    "precipitation_mm": 23.1, "precipitation_in": 0.91,
-    "precipitation_chance_pct": 35,
-    "wind_max_kmh": 18.0, "wind_max_mph": 11.2
+    "conditions": "Moderate rain showers",
+    "temp_high_c": 26.7, "temp_high_f": 80.1,
+    "temp_low_c": 22.2, "temp_low_f": 72.0,
+    "precipitation_mm": 20.2, "precipitation_in": 0.8,
+    "precipitation_chance_pct": 54,
+    "wind_max_kmh": 30.3, "wind_max_mph": 18.8
   }
 }
 ```
@@ -137,31 +155,41 @@ Trimmed: `wind_gust_max_kmh/mph`, `uv_index_max`, `sunrise`, `sunset` are omitte
 `forecast_day`; the full `location` object (the same one shown in call 1's response) is reduced to
 the fields the advice actually uses.
 
-What the agent has to notice: the `reason` cites the millimetre figure (23.1 mm), not the 35
-percent chance, even though both numbers are in `inputs_used`. That is because `rule_fired` is
-`chance>=60_or_mm>=5.0`: the chance (35%) never crossed its own 60% threshold, only the mm side
-did, and `recommendations.py` only cites the side that actually fired. An agent that says "yes,
-there's a 35 percent chance of rain" would be quoting a real number for the wrong reason; the
-correct line names the 23.1 mm instead.
-
 **Agent's final answer:**
 
 ```
-[paste the agent's actual reply to "Will it rain in Chicago tomorrow?" here]
+Yes, it will rain in Chicago tomorrow. Expect moderate rain showers with about 20 mm (0.8 inches) of precipitation and a 54% chance of rain. Definitely take an umbrella—that amount of rain is well above the threshold for needing one.
 ```
+
+What the agent has to notice: the `reason` cites the millimetre figure (20.2 mm), not the 54
+percent chance, even though both numbers are in `inputs_used`. That is because `rule_fired` is
+`chance>=60_or_mm>=5.0`: the chance (54%) never crossed its own 60% threshold, only the mm side
+did, and `recommendations.py` only cites the side that actually fired. The agent's answer leads
+with "about 20 mm" and mentions the 54% only as supporting colour, which lines up with what fired.
+
+This scenario also caught a real prompt bug before it was fixed. In an earlier version of
+`system_prompt.md`, the agent called `get_umbrella_advice` with no `date` argument at all. That
+tool defaults a missing date to today, not tomorrow, so the agent was quietly getting today's
+numbers back and reporting them as tomorrow's: 4 mm and 32 percent, when tomorrow's real forecast
+was 20 mm and 43 percent at the time that bug was found. The system prompt now states explicitly
+that omitting the argument means today, and instructs the agent to call `get_forecast` first and
+pass the resolved date explicitly, which is exactly the two-call sequence shown above. This
+transcript is the fixed behaviour: the agent read `2026-08-10` back from the forecast and passed
+that exact string to `get_umbrella_advice`, rather than letting the tool default silently.
 
 ---
 
 ## 2. "Should I bring a jacket to Austin this weekend?"
 
-**Tool:** `get_travel_recommendation` for Austin. Today (2026-08-09) is a Sunday, so "this
-weekend" is already underway; the work order for this file specifies the coming Saturday, which is
-`2026-08-15`.
+**Tool:** `get_forecast` for Austin. Note this differs from the tool the system prompt's
+"which tool answers which question" table would suggest for a packing question
+(`get_travel_recommendation`); the deployed agent instead answered directly off the raw forecast,
+consistently, across every clean capture. See the commentary below.
 
 **Call**
 
 ```json
-{"name": "get_travel_recommendation", "arguments": {"location": "Austin", "date": "2026-08-15"}}
+{"name": "get_forecast", "arguments": {"location": "Austin, TX", "days": 5}}
 ```
 
 **Response**
@@ -170,55 +198,93 @@ weekend" is already underway; the work order for this file specifies the coming 
 {
   "status": "ok",
   "location": {
+    "name": "Austin",
+    "admin1": "Texas",
+    "country": "United States",
+    "country_code": "US",
+    "latitude": 30.26715,
+    "longitude": -97.74306,
+    "timezone": "America/Chicago",
     "label": "Austin, Texas, United States",
-    "timezone": "America/Chicago"
+    "source": "open-meteo-geocoding",
+    "alternatives": [
+      "Austin Gardens Colonia, Texas, United States",
+      "Austin Park, Texas, United States",
+      "Austin Park, Texas, United States",
+      "Austinia Airport, Texas, United States"
+    ]
   },
-  "date": "2026-08-15",
-  "recommendation": {
-    "score": 85,
-    "band": "good",
-    "factors": [
-      {
-        "points": 14.7,
-        "why": "High temperature is 39.9 C, above the 35 C comfort threshold."
-      }
-    ],
-    "headline": "Travel score 85/100 (good). Biggest factor: High temperature is 39.9 C, above the 35 C comfort threshold.",
-    "packing_list": ["sunscreen", "layers, the day swings more than 12 C"],
-    "alerts_considered": 0,
-    "inputs_scored": 6,
-    "inputs_available": 6
-  },
-  "forecast_day": {
-    "date": "2026-08-15",
-    "conditions": "Overcast",
-    "temp_high_c": 39.9, "temp_high_f": 103.8,
-    "temp_low_c": 26.2, "temp_low_f": 79.2,
-    "precipitation_mm": 0.0, "precipitation_chance_pct": 2,
-    "wind_max_kmh": 25.8, "wind_max_mph": 16.0,
-    "uv_index_max": 7.7
-  },
-  "alerts": [],
-  "alerts_status": "ok"
+  "timezone": "America/Chicago",
+  "days": [
+    {
+      "date": "2026-08-09",
+      "conditions": "Overcast",
+      "temp_high_c": 37.3, "temp_high_f": 99.1,
+      "temp_low_c": 25.6, "temp_low_f": 78.1,
+      "precipitation_mm": 0.0, "precipitation_chance_pct": 13
+    },
+    {
+      "date": "2026-08-10",
+      "conditions": "Overcast",
+      "temp_high_c": 36.6, "temp_high_f": 97.9,
+      "temp_low_c": 26.2, "temp_low_f": 79.2,
+      "precipitation_mm": 0.0, "precipitation_chance_pct": 5
+    },
+    {
+      "date": "2026-08-11",
+      "conditions": "Overcast",
+      "temp_high_c": 39.9, "temp_high_f": 103.8,
+      "temp_low_c": 26.0, "temp_low_f": 78.8,
+      "precipitation_mm": 0.0, "precipitation_chance_pct": 1
+    },
+    {
+      "date": "2026-08-12",
+      "conditions": "Partly cloudy",
+      "temp_high_c": 40.3, "temp_high_f": 104.5,
+      "temp_low_c": 25.9, "temp_low_f": 78.6,
+      "precipitation_mm": 0.0, "precipitation_chance_pct": 0
+    },
+    {
+      "date": "2026-08-13",
+      "conditions": "Partly cloudy",
+      "temp_high_c": 40.4, "temp_high_f": 104.7,
+      "temp_low_c": 25.1, "temp_low_f": 77.2,
+      "precipitation_mm": 0.0, "precipitation_chance_pct": 0
+    }
+  ]
 }
 ```
 
-Trimmed: `feels_like_high_c/f`, `wind_gust_max_kmh/mph`, `sunrise`, `sunset` are omitted from
-`forecast_day`.
-
-What the agent has to notice: the packing list does not include a jacket. `temp_low_c` is 26.2,
-well above the 12 C threshold that would trigger one, so the honest answer to "should I bring a
-jacket" is no, not a hedge. The list instead flags sunscreen (UV index 7.7, above the 6 threshold)
-and layers (the 13.7 C swing between the 39.9 C high and 26.2 C low is over the 12 C threshold).
-An agent that answers the literal jacket question without reading the packing list, or that pads
-the list with an item that is not there, would be wrong; the correct answer corrects the premise
-of the question and points at the two items that are actually recommended.
+Trimmed: each day's `weather_code`, `feels_like_high_c/f`, `precipitation_in`, `wind_max_kmh/mph`,
+`wind_gust_max_kmh/mph`, `uv_index_max`, `sunrise`, and `sunset` fields are omitted above for
+readability. All 5 requested days are shown.
 
 **Agent's final answer:**
 
 ```
-[paste the agent's actual reply to "Should I bring a jacket to Austin this weekend?" here]
+No, you won't need a jacket in Austin this weekend. 
+
+The forecast shows extremely hot conditions with highs reaching 100-105°F (38-41°C) and lows only dropping to the upper 70s°F (25-26°C). It will feel even hotter, with heat indices up to 106°F. The weekend (August 9-10) will be overcast with no rain expected.
+
+This is typical Texas summer heat—bring sunscreen and stay hydrated, but a jacket would be unnecessary.
 ```
+
+What the agent has to notice: no day in the 5-day window has a low anywhere near jacket weather
+(lows sit in the mid-to-upper 70s Fahrenheit) and precipitation is 0.0 mm every day, so the honest
+answer to "should I bring a jacket" is a clean no, not a hedge. The agent's answer does that: it
+leads with the temperature and precipitation numbers rather than repeating the literal jacket
+question back.
+
+Two things differ from the original prediction for this scenario. First, the tool actually used
+was `get_forecast`, not `get_travel_recommendation`. The system prompt's own tool table maps "what
+should I pack?" to `get_travel_recommendation`, but "should I bring a jacket" apparently reads to
+the agent as closer to a plain forecast question, and every clean capture in this session answered
+it that way, reasoning about temperature and precipitation directly rather than going through the
+travel-recommendation scoring and packing list. Second, "this weekend" was resolved inconsistently
+across captures: this run's answer names "August 9-10", one other run named "August 10-11", and
+today, 2026-08-09, is itself a Sunday. Neither range is a clean Saturday-Sunday pair. The
+substantive conclusion (hot, dry, no jacket) did not change between captures, but the date
+reasoning behind "this weekend" was not fully reliable.
 
 ---
 
@@ -264,36 +330,90 @@ of the question and points at the two items that are actually recommended.
 
 Nothing trimmed; this is the whole response.
 
-This turned out to be a hit, not the quiet result that was expected going in: Miami had one active
-NWS alert at capture time, a Heat Advisory. `coverage` is `us_nws`, which per `system_prompt.md`
-means this feed does cover Miami and the one alert listed is everything currently active there, not
-a partial view. Per the system prompt, the agent has to lead with the event, severity, and area,
-then quote the `instruction` text verbatim rather than paraphrasing it, and point the user at
-weather.gov. Had Miami had nothing active, the response would instead show `"alerts": []` and
-`"count": 0` with `coverage` still `us_nws`, and the correct answer would be "no active alerts
-right now" rather than "no alert coverage here."
+Miami had one active NWS alert at capture time, a Heat Advisory. `coverage` is `us_nws`, which per
+`system_prompt.md` means this feed does cover Miami and the one alert listed is everything
+currently active there, not a partial view.
 
 **Agent's final answer:**
 
 ```
-[paste the agent's actual reply to "Is there any severe weather in Miami right now?" here]
+Yes, there is a **Heat Advisory** in effect for Miami right now. 
+
+The National Weather Service issued a Moderate severity alert for the Miami-Dade and Broward metro areas, including coastal regions. Heat index values are expected to exceed 105°F from 11 AM to 6 PM EDT today (August 9).
+
+**Official instructions:** Drink plenty of fluids, stay in an air-conditioned room, stay out of the sun, and check up on relatives and neighbors. Wear lightweight and loose-fitting clothing, and try to limit strenuous activities to early morning or evening. Take action when you see symptoms of heat exhaustion and heat stroke.
+
+For the full alert details, visit weather.gov.
 ```
+
+What the agent has to notice, and did: per the system prompt, when there is an active alert the
+agent must lead with the event, severity, and area, then quote the official `instruction` text
+rather than paraphrasing safety guidance in its own words, and point the user at weather.gov. The
+answer does all three: it leads with "Heat Advisory," states the severity and area, quotes the
+instruction text close to verbatim (reformatted into the agent's own sentence flow but not
+substantively altered), and closes with the weather.gov pointer. Had Miami had nothing active, the
+response would instead show `"alerts": []` and `"count": 0` with `coverage` still `us_nws`, and the
+correct answer would be "no active alerts right now" rather than "no alert coverage here."
 
 ---
 
 ## 4. "Where has better weather next Tuesday, Denver or Seattle?"
 
-**Tool:** `compare_locations`. Today is Sunday, 2026-08-09; "next Tuesday" is read here as the
-nearest Tuesday that has not happened yet, `2026-08-11`, two days out, rather than skipping ahead
-to the Tuesday after.
+**Tools, in order:** `get_forecast` for Denver, then `compare_locations` for both cities on a
+specific date.
 
-**Call**
+**Call 1**
 
 ```json
-{"name": "compare_locations", "arguments": {"locations": ["Denver", "Seattle"], "date": "2026-08-11"}}
+{"name": "get_forecast", "arguments": {"location": "Denver", "days": 7}}
 ```
 
-**Response**
+**Response 1**
+
+```json
+{
+  "status": "ok",
+  "location": {
+    "name": "Denver",
+    "admin1": "Colorado",
+    "country": "United States",
+    "country_code": "US",
+    "latitude": 39.73915,
+    "longitude": -104.9847,
+    "timezone": "America/Denver",
+    "label": "Denver, Colorado, United States",
+    "source": "open-meteo-geocoding",
+    "alternatives": [
+      "Denver City, Texas, United States",
+      "Denver, Pennsylvania, United States",
+      "Denver, North Carolina, United States",
+      "Denver, Iowa, United States"
+    ]
+  },
+  "timezone": "America/Denver",
+  "days": [
+    {"date": "2026-08-09", "conditions": "Overcast", "temp_high_c": 37.0, "temp_high_f": 98.6, "temp_low_c": 19.7, "temp_low_f": 67.5, "precipitation_mm": 0.0, "precipitation_chance_pct": 7},
+    {"date": "2026-08-10", "conditions": "Overcast", "temp_high_c": 34.9, "temp_high_f": 94.8, "temp_low_c": 19.7, "temp_low_f": 67.5, "precipitation_mm": 0.0, "precipitation_chance_pct": 9},
+    {"date": "2026-08-11", "conditions": "Overcast", "temp_high_c": 37.2, "temp_high_f": 99.0, "temp_low_c": 19.2, "temp_low_f": 66.6, "precipitation_mm": 0.0, "precipitation_chance_pct": 12},
+    {"date": "2026-08-12", "conditions": "Moderate rain", "temp_high_c": 35.5, "temp_high_f": 95.9, "temp_low_c": 18.7, "temp_low_f": 65.7, "precipitation_mm": 16.8, "precipitation_chance_pct": 70},
+    {"date": "2026-08-13", "conditions": "Moderate drizzle", "temp_high_c": 32.2, "temp_high_f": 90.0, "temp_low_c": 21.4, "temp_low_f": 70.5, "precipitation_mm": 0.9, "precipitation_chance_pct": 89},
+    {"date": "2026-08-14", "conditions": "Violent rain showers", "temp_high_c": 29.8, "temp_high_f": 85.6, "temp_low_c": 18.3, "temp_low_f": 64.9, "precipitation_mm": 47.7, "precipitation_chance_pct": 78},
+    {"date": "2026-08-15", "conditions": "Overcast", "temp_high_c": 28.3, "temp_high_f": 82.9, "temp_low_c": 19.1, "temp_low_f": 66.4, "precipitation_mm": 0.0, "precipitation_chance_pct": 71}
+  ]
+}
+```
+
+Trimmed: each day's `weather_code`, `feels_like_high_c/f`, `precipitation_in`, `wind_max_kmh/mph`,
+`wind_gust_max_kmh/mph`, `uv_index_max`, `sunrise`, and `sunset` fields are omitted above for
+readability. All 7 requested days are shown.
+
+**Call 2**
+
+```json
+{"name": "compare_locations", "arguments": {"locations": ["Denver", "Seattle"], "date": "2026-08-12"}}
+```
+
+**Response 2**
 
 ```json
 {
@@ -309,9 +429,9 @@ to the Tuesday after.
       },
       {
         "label": "Denver, Colorado, United States",
-        "score": 93,
-        "band": "good",
-        "headline": "Travel score 93/100 (good). Biggest factor: High temperature is 37.2 C, above the 35 C comfort threshold.",
+        "score": 44,
+        "band": "marginal",
+        "headline": "Travel score 44/100 (marginal). Biggest factor: Precipitation is 16.8 mm, above the 2 mm comfort threshold.",
         "alerts_status": "ok"
       }
     ],
@@ -325,22 +445,35 @@ to the Tuesday after.
 Nothing trimmed; `compare_locations` only returns the ranked summary shown above, not each
 location's full forecast day.
 
-What the agent has to notice: both cities score in the "good" band, so this is a real "which is
-better" answer, not a case where one location is dramatically worse. Seattle's headline carries no
-"biggest factor" clause at all, meaning no penalty fired for Seattle on this date; Denver's 93
-comes from one factor, its 37.2 C high crossing the 35 C comfort threshold. The agent should name
-that one factor for Denver rather than inventing a reason for Seattle's score when none was
-returned.
-
 **Agent's final answer:**
 
 ```
-[paste the agent's actual reply to "Where has better weather next Tuesday, Denver or Seattle?" here]
+**Seattle has much better weather next Tuesday (August 12).**
+
+Seattle scores 100/100 (good conditions), while Denver scores only 44/100 (marginal). The main issue in Denver is moderate rain—16.8 mm (0.66 inches) expected with a 70% chance of precipitation, well above the comfort threshold. Denver will also be hot at 96°F (36°C) with gusty winds up to 30 mph.
+
+Seattle, by contrast, should have pleasant conditions with no significant weather concerns.
 ```
+
+What the agent got right: both the 16.8 mm and the 70 percent chance in the answer match
+`2026-08-12`'s forecast day exactly, and the 96°F / 36°C figure is a fair rounding of that day's
+95.9°F / 35.5°C high. The agent correctly named Denver's one scoring factor rather than inventing a
+reason for Seattle's clean 100.
+
+What the agent got wrong: today, 2026-08-09, is a Sunday, so the next Tuesday is `2026-08-11`, not
+`2026-08-12`. The agent labelled `2026-08-12` (a Wednesday) as "next Tuesday" both in the tool call
+it made and in its final prose, consistently, across repeated captures of this same question in
+this session. Neither `get_forecast` nor any other tool response includes a weekday name for each
+date; the payload is a bare `YYYY-MM-DD` string. The system prompt tells the agent to "count
+forward from the first entry" for a named weekday, but nothing in any tool response tells the agent
+what weekday the first entry actually is, so the agent has to work that out itself from the date
+string, and in this case it worked it out one day wrong. This is a real gap worth flagging: the
+guardrail catches the agent guessing at *today's date*, but nothing catches it guessing wrong about
+which day of the week a known date falls on.
 
 ---
 
-## 5. Disambiguation: "What is the weather in Springfield?"
+## 5. "What is the weather in Springfield?"
 
 **Tool:** `resolve_location` for "Springfield". Per `system_prompt.md`, "Springfield" is exactly
 the kind of place name the agent must resolve before fetching any weather, because it is
@@ -377,25 +510,29 @@ ambiguous, not because it is misspelled.
 
 Nothing trimmed; this is the whole response.
 
-What the agent has to notice: the tool did not fail or ask anything itself, it picked the
-highest-population match (Springfield, Missouri) and returned four other real Springfields
-alongside it in `alternatives`. Per `system_prompt.md`, when the top match is not obviously the
-one the user meant, the agent must list the candidates and ask which one rather than silently
-fetching Springfield, Missouri's weather. This is the guardrail against guessing between real
-cities that share a name.
-
 **Agent's final answer:**
 
 ```
-[paste the agent's actual reply to "What is the weather in Springfield?" here]
+There are several Springfields. The top match is Springfield, Missouri, but there's also Springfield in Illinois, Massachusetts, Ohio, and Tennessee. Which one would you like the weather for?
 ```
+
+What the agent has to notice, and did: the tool did not fail or ask anything itself, it picked the
+highest-population match (Springfield, Missouri) and returned four other real Springfields
+alongside it in `alternatives`. Per `system_prompt.md`, when the top match is not obviously the one
+the user meant, the agent must list the candidates and ask which one rather than silently fetching
+Springfield, Missouri's weather. The agent's answer does exactly that: it names all five
+Springfields and asks the user to pick, without calling any weather tool at all yet. This is the
+guardrail against guessing between real cities that share a name, and it held.
 
 ---
 
 ## 6. An error the agent has to handle: current weather for a place that does not exist
 
-**Tool:** `get_current_weather` for a made-up place name, `"Xyzzyville Nonexistentstan"`, chosen so
-geocoding genuinely finds nothing rather than resolving to a real, differently-spelled place.
+**Question asked:** "What is the weather in Xyzzyville Nonexistentstan?", a made-up place name
+chosen so geocoding genuinely finds nothing rather than resolving to a real, differently-spelled
+place.
+
+**Tool:** `get_current_weather` for `"Xyzzyville Nonexistentstan"`.
 
 **Call**
 
@@ -415,28 +552,37 @@ geocoding genuinely finds nothing rather than resolving to a real, differently-s
 
 Nothing trimmed; this is the whole response.
 
-What the agent has to notice: there is no `current` weather payload at all here, only `status`,
-`message`, and `hint`. Per `system_prompt.md`'s error-handling section, a `not_found` status means
-the agent should say the place could not be resolved and ask for a more specific name (city plus
-state or country), not retry the identical query or invent a plausible city to answer for.
-
 **Agent's final answer:**
 
 ```
-[paste the agent's actual reply to the current-weather question for a nonexistent place here]
+I could not find a location called "Xyzzyville Nonexistentstan." This place name doesn't appear to exist in the weather service's database. 
+
+Could you provide a real city name, or if you meant a specific place, try including more details like the state or country? Alternatively, you can provide coordinates in "lat,lon" format.
 ```
+
+What the agent has to notice, and did: there is no `current` weather payload at all here, only
+`status`, `message`, and `hint`. Per `system_prompt.md`'s error-handling section, a `not_found`
+status means the agent should say the place could not be resolved and ask for a more specific name
+(city plus state or country), not retry the identical query or invent a plausible city to answer
+for. The agent's answer says plainly that the place was not found and offers exactly the two
+options the tool's own `hint` suggests: a more specific name, or coordinates. It did not retry the
+call and did not fabricate a forecast.
 
 ---
 
-## Filling in the blanks
+## Reproducing this against the deployed agent
 
-Once the Databricks workspace is reachable:
+The endpoint is `mas-59b8c794-endpoint`. Post to its `/invocations` API with an `input` array
+containing the user's message, then loop: read the response's `output` array, and if it contains
+any `mcp_approval_request` items, send back an `mcp_approval_response` for each one with
+`"approve": true`, appending both the request and the response to the running conversation before
+posting again. Keep looping until the `output` array contains a `message` with no further approval
+requests pending; that message's `output_text` content is the agent's final answer. The tool calls
+themselves show up as `function_call_output` items alongside the approval requests, each carrying
+the tool `name` and its JSON `output`.
 
-1. Deploy `mcp_server/` as its own Databricks App (see the module docstring in
-   `weather_mcp_server.py` for the app.yaml + FastMCP entrypoint pattern).
-2. Register that app's URL as an external MCP server for an Agent Bricks agent.
-3. Create the agent using the system prompt in `agent/system_prompt.md` (everything below its
-   `---` line, pasted into the agent's Instructions field).
-4. Ask the agent the six questions above, in order, in a fresh conversation.
-5. Paste each answer into the matching "Agent's final answer" block in this file, replacing the
-   bracketed placeholder text.
+Because the agent draws on live forecast and alert data and is not fully deterministic in which
+tool it reaches for on some phrasings, a fresh run of any of the six questions above will not
+reproduce these transcripts exactly. It should, however, follow the same shape: the same tool
+choices for scenarios 1, 3, 5, and 6, and answers whose numbers agree with whatever the tools
+returned in that run.
