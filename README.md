@@ -241,5 +241,6 @@ degrades quietly instead of failing.
   and `lakebase.py`, because each Databricks App deploys from its own folder and there is no
   shared install step between them
 - `agent/system_prompt.md` - the agent instructions
+- `agent/tools.md` - the agent's tool list, with the connection wiring and each tool's contract
 - `agent/transcripts.md` - example questions and what the agent did with them
 - `tests/` - pytest suite, no network
