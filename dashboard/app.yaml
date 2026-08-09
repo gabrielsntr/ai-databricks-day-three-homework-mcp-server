@@ -1,0 +1,18 @@
+command:
+  - "python"
+  - "app.py"
+
+resources:
+  - name: requirements
+    source:
+      path: ./requirements.txt
+
+env:
+  - name: APP_NAME
+    value: "weather-mcp-dashboard"
+  - name: NWS_CONTACT_EMAIL
+    value: "change-me@example.com"
+  - name: LAKEBASE_SECRET_SCOPE
+    value: "database"
+  - name: LAKEBASE_SECRET_KEY
+    value: "lakebase-url"
