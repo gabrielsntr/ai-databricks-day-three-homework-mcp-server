@@ -8,7 +8,7 @@ Set these once per shell so you can paste the rest without editing:
 
 ```bash
 export P=gabriel-macos                          # your ~/.databrickscfg profile
-export U=gabriellsantoro@gmail.com              # your workspace user
+export U="$(databricks current-user me -p $P | python3 -c 'import sys,json; print(json.load(sys.stdin)["userName"])')"
 export WS=https://dbc-a842b221-2cfd.cloud.databricks.com
 ```
 
