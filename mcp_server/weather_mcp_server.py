@@ -35,6 +35,7 @@ import os
 import time
 from contextvars import ContextVar
 
+import uvicorn
 from fastmcp import FastMCP
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -466,10 +467,14 @@ if __name__ == "__main__":
     # documented way to attach a Starlette ASGI middleware is the
     # `middleware=` kwarg on run()/run_http_async()/http_app(), which is
     # threaded straight into the Starlette app fastmcp builds.
+    # Stateless mode: every request stands alone, with no server-side session to keep. A session
+    # lives in one process's memory, so a stateful server only works while there is exactly one
+    # replica and every request from a client lands on it. Databricks Apps can run more than one,
+    # and the Unity Catalog `http_request` function used to test the connection cannot carry a
+    # session at all. Stateless costs nothing here because no tool holds state between calls.
     port = int(os.getenv("DATABRICKS_APP_PORT", os.getenv("PORT", 8000)))
-    mcp.run(
-        transport="http",
-        host="0.0.0.0",
-        port=port,
+    app = mcp.http_app(
         middleware=[Middleware(ForwardedIdentityMiddleware)],
+        stateless_http=True,
     )
+    uvicorn.run(app, host="0.0.0.0", port=port)

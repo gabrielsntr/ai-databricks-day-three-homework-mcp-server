@@ -16,7 +16,6 @@ env:
     value: "nws-contact-email"
   - name: NWS_CONTACT_EMAIL
     value: "change-me@example.com"
-  - name: LAKEBASE_SECRET_SCOPE
-    value: "database"
-  - name: LAKEBASE_SECRET_KEY
-    value: "lakebase-url"
+  # The query log is optional (see query_log.py). To turn it on, set LAKEBASE_SECRET_SCOPE and
+  # LAKEBASE_SECRET_KEY to a Databricks secret holding a Lakebase connection URL, or set
+  # LAKEBASE_URL directly for local development.

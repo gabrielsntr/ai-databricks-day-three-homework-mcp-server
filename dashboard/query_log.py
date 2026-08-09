@@ -7,6 +7,13 @@ raise: a misconfigured or unreachable Lakebase should degrade the server to
 "no query history", not take it down. The first failure logs one WARNING
 and flips a module-level _disabled flag so every later call is a no-op
 instead of retrying a connection that is not going to work.
+
+status() is what the dashboard should read to decide what to show: it tells
+apart "not configured, this is optional" from "configured but broken" from
+"configured and working", so an unreachable Lakebase renders as an honest
+error instead of a silent, misleading "no queries yet". fetch_recent() shares
+that same failure handling with record() - a failed read disables the module
+and records a reason, just like a failed write does.
 """
 
 import logging
@@ -18,6 +25,7 @@ logger = logging.getLogger("weather-mcp.query_log")
 
 _warned = False
 _disabled = False
+_last_error: str | None = None
 _lock = threading.Lock()
 
 _INSERT_SQL = """
@@ -39,6 +47,56 @@ LIMIT %s
 def is_enabled() -> bool:
     """Whether Lakebase logging is currently active for this process."""
     return not _disabled and lakebase.is_configured()
+
+
+def status() -> dict:
+    """
+    Report whether the query log is working, for the dashboard to render an
+    honest empty state instead of guessing from an empty row list.
+
+    Returns:
+        A dict with a "state" of "off" (not configured, logging is optional),
+        "ok" (configured, no failure seen yet this process), or "error"
+        (configured, but a read or write has failed), plus a plain-English
+        "message". The "error" message never includes a connection string,
+        host name, or stack trace - those go to the log, not the response.
+    """
+    if not lakebase.is_configured():
+        return {
+            "state": "off",
+            "message": (
+                "The query log is optional and is not turned on for this deployment. "
+                "Set LAKEBASE_URL, or LAKEBASE_SECRET_SCOPE and LAKEBASE_SECRET_KEY, to turn it on."
+            ),
+        }
+    if _disabled:
+        return {
+            "state": "error",
+            "message": "The query log is configured, but the database could not be reached.",
+        }
+    return {"state": "ok", "message": "The query log is configured and working."}
+
+
+def _mark_failed(reason: str) -> None:
+    """
+    Disable further attempts for the rest of this process and remember why.
+
+    Call only from inside an except block, so the one WARNING this logs (per
+    process) carries the traceback via exc_info. reason is a short, fixed
+    label (e.g. "write" or "read"), never the exception text: an exception
+    from psycopg2 can contain the connection string or host name, and that
+    must never end up in _last_error or any response built from it.
+    """
+    global _warned, _disabled, _last_error
+    with _lock:
+        _last_error = reason
+        if not _warned:
+            logger.warning(
+                "Lakebase query logging is unavailable, disabling it for the rest of this process.",
+                exc_info=True,
+            )
+            _warned = True
+        _disabled = True
 
 
 def record(
@@ -67,7 +125,6 @@ def record(
         duration_ms: How long the tool call took, in milliseconds.
         requested_by: The end user's identity (from x-forwarded-email/x-forwarded-user), if known.
     """
-    global _warned, _disabled
     if _disabled or not lakebase.is_configured():
         return
 
@@ -89,14 +146,7 @@ def record(
             ),
         )
     except Exception:
-        with _lock:
-            if not _warned:
-                logger.warning(
-                    "Lakebase query logging is unavailable, disabling it for the rest of this process.",
-                    exc_info=True,
-                )
-                _warned = True
-            _disabled = True
+        _mark_failed("write")
 
 
 def fetch_recent(limit: int = 50) -> list[dict]:
@@ -114,5 +164,5 @@ def fetch_recent(limit: int = 50) -> list[dict]:
     try:
         return lakebase.run_query(_RECENT_SQL, (limit,))
     except Exception:
-        logger.warning("Failed to fetch recent queries from Lakebase.", exc_info=True)
+        _mark_failed("read")
         return []

@@ -67,8 +67,16 @@ async def healthz() -> dict:
 
 @app.get("/api/recent")
 def api_recent(limit: int = Query(default=50, ge=1, le=200)) -> dict:
-    """Recent MCP tool calls logged to Lakebase, most recent first, plus whether logging is on at all."""
-    return {"logging_enabled": query_log.is_enabled(), "queries": query_log.fetch_recent(limit)}
+    """
+    Recent MCP tool calls logged to Lakebase, most recent first.
+
+    queries is fetched first, since a failing fetch is what flips status()
+    from "ok" to "error" - fetching status() first could report a stale "ok"
+    from before this request's own failure. logging_enabled is kept for any
+    existing caller; status carries the richer off/ok/error state.
+    """
+    queries = query_log.fetch_recent(limit)
+    return {"logging_enabled": query_log.is_enabled(), "status": query_log.status(), "queries": queries}
 
 
 @app.get("/api/current")

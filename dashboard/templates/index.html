@@ -531,12 +531,21 @@
     const bodyEl = document.getElementById("recent-body");
     clearError(errorEl);
 
-    if (!payload.logging_enabled) {
+    const state = payload.status && payload.status.state;
+
+    if (state === "off") {
       bodyEl.innerHTML =
-        "<p class=\"empty-state\">Lakebase logging is not configured for this deployment, so there is no query " +
-        "history to show. Set <code>LAKEBASE_URL</code> or <code>LAKEBASE_SECRET_SCOPE</code> / " +
-        "<code>LAKEBASE_SECRET_KEY</code> for the MCP server, and create the table with " +
-        "<code>mcp_server/schema_weather_queries.sql</code>, to start recording tool calls here.</p>";
+        "<p class=\"empty-state\">The query log is optional and is not turned on for this deployment. Set " +
+        "<code>LAKEBASE_URL</code> or <code>LAKEBASE_SECRET_SCOPE</code> / <code>LAKEBASE_SECRET_KEY</code> " +
+        "for the MCP server, and create the table with <code>mcp_server/schema_weather_queries.sql</code>, " +
+        "to start recording tool calls here.</p>";
+      return;
+    }
+
+    if (state === "error") {
+      bodyEl.innerHTML =
+        "<p class=\"empty-state\">The query log is configured, but the database could not be reached. " +
+        "Query history cannot be shown right now. This does not affect weather lookups.</p>";
       return;
     }
 

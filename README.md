@@ -167,7 +167,7 @@ Copy `.env.example` and edit it if you want to change anything. All of it is opt
 | --- | --- | --- |
 | `NWS_CONTACT_EMAIL` | a placeholder address | The NWS asks every caller to identify itself in the `User-Agent` header. Put a real address here before you deploy. |
 | `NWS_CONTACT_SECRET_SCOPE` / `NWS_CONTACT_SECRET_KEY` | unset | Read the contact address from a Databricks secret instead of the environment, if you would rather not commit an email address. |
-| `LAKEBASE_SECRET_SCOPE` / `LAKEBASE_SECRET_KEY` | unset | Where to find the Lakebase connection URL. Both `app.yaml` files set them to `database` and `lakebase-url`, but the code has no built-in default, so locally there is none. Leave them unset and query logging turns itself off. |
+| `LAKEBASE_SECRET_SCOPE` / `LAKEBASE_SECRET_KEY` | unset | Where to find the Lakebase connection URL: the name of a Databricks secret scope and key holding it. Neither `app.yaml` sets them, since this repo ships with no Lakebase instance to point at. Leave them unset and query logging stays off. |
 | `LAKEBASE_URL` | unset | A direct Postgres URL for local development, used instead of the secret. |
 | `APP_NAME` | `weather-mcp-server` | The name sent in the `User-Agent` header. |
 | `DATABRICKS_APP_PORT` / `PORT` | 8000 and 8001 | Set by Databricks Apps at runtime. |
@@ -181,16 +181,26 @@ already does for the NWS address. Do not put it in `app.yaml`.
 
 `query_log.py` writes one row per tool call to a Lakebase table, which is what fills the recent
 queries panel on the dashboard. It is genuinely optional. If no Lakebase URL resolves, the module
-disables itself, logs one warning, and every tool keeps working.
+stays off and every tool keeps working. If it is configured but Lakebase cannot actually be
+reached, a write or read failure disables it for the rest of the process and logs one warning; a
+tool call still never fails because of it.
 
-To turn it on, create the table:
+The dashboard reflects this honestly instead of guessing from an empty result: `/api/recent`
+reports a `status` of `off` (not configured, nothing to do), `error` (configured, but the database
+could not be reached), or `ok` (configured and working), and the recent-queries panel shows a
+different message for each. An unreachable database renders as "the database could not be
+reached", never as a silent "no queries yet".
+
+To turn it on, point both apps at the same Lakebase instance by setting `LAKEBASE_URL`, or
+`LAKEBASE_SECRET_SCOPE` / `LAKEBASE_SECRET_KEY` naming a Databricks secret that holds the
+connection URL, then create the table:
 
 ```bash
 psql "$LAKEBASE_URL" -f mcp_server/schema_weather_queries.sql
 ```
 
-Then make sure both apps can reach the same `database/lakebase-url` secret. A logging failure can
-never fail a tool call: the write is wrapped, and after the first failure the module stops trying.
+A logging failure can never fail a tool call: the write is wrapped, and after the first failure
+the module stops trying.
 
 ## Deploying to Databricks
 
