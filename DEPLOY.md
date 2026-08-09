@@ -29,21 +29,45 @@ first. It is the one step that will silently degrade rather than fail loudly.
 
 ## 2. Deploy the two apps
 
-Each app deploys from its own workspace directory. Sync only the one folder, so `app.yaml` lands
-at the root of the app's source path where the runtime looks for it.
+Two ways to do this. The Git path is better for this repo, because Apps can deploy a single
+subdirectory straight from GitHub and you never have to keep a workspace copy in step.
+
+### Option A: straight from GitHub (recommended)
+
+`source_code_path` inside `git_source` points at a subdirectory, and the app treats that
+directory as its root and cannot see anything outside it. That is exactly the two-apps-one-repo
+case.
 
 ```bash
 # MCP server
-databricks sync mcp_server "/Workspace/Users/$U/weather-mcp" -p $P
-databricks apps create weather-mcp -p $P
-databricks apps deploy weather-mcp --source-code-path "/Workspace/Users/$U/weather-mcp" -p $P
+databricks apps create weather-mcp -p $P --json '{
+  "git_repository": {"url": "https://github.com/gabrielsntr/ai-databricks-day-three-homework-mcp-server", "provider": "gitHub"}
+}'
+databricks apps deploy weather-mcp -p $P --json '{
+  "git_source": {"branch": "main", "source_code_path": "mcp_server"}
+}'
 ```
 
 ```bash
 # Dashboard
-databricks sync dashboard "/Workspace/Users/$U/weather-dashboard" -p $P
-databricks apps create weather-dashboard -p $P
-databricks apps deploy weather-dashboard --source-code-path "/Workspace/Users/$U/weather-dashboard" -p $P
+databricks apps create weather-dashboard -p $P --json '{
+  "git_repository": {"url": "https://github.com/gabrielsntr/ai-databricks-day-three-homework-mcp-server", "provider": "gitHub"}
+}'
+databricks apps deploy weather-dashboard -p $P --json '{
+  "git_source": {"branch": "main", "source_code_path": "dashboard"}
+}'
+```
+
+Redeploy after a push by repeating the `deploy` command.
+
+### Option B: sync from your laptop
+
+Useful for trying a change you have not committed. Sync one folder at a time, so `app.yaml` lands
+at the root of the app's source path.
+
+```bash
+databricks sync mcp_server "/Workspace/Users/$U/weather-mcp" -p $P
+databricks apps deploy weather-mcp --source-code-path "/Workspace/Users/$U/weather-mcp" -p $P
 ```
 
 `databricks apps deploy` uploads the code, applies the config, and starts the app. Get the URLs
@@ -107,8 +131,16 @@ databricks secrets put-secret weather-mcp oauth-client-secret --string-value '<c
 
 ### 3c. Create the connection
 
-Run this in a SQL editor or a notebook. Reference the secret with `secret()` rather than pasting
-the value, so it stays out of query history and out of `SHOW CREATE CONNECTION`.
+There is a UI path and a SQL path. They build the same thing: a Unity Catalog HTTP connection,
+plus an MCP service that is itself a UC securable addressed as `catalog.schema.name`.
+
+For the UI: **AI Gateway** > **MCPs** > **Register MCP Server**, choose the external option, and
+give it `https://weather-mcp-<id>.aws.databricksapps.com/mcp` as the endpoint. Pick the shared
+principal auth mode and give it the service principal from 3a. Then grant the agent access with
+`GRANT EXECUTE ON MCP SERVICE <catalog>.<schema>.<name> TO ...`.
+
+For SQL, run this in a SQL editor or a notebook. Reference the secret with `secret()` rather than
+pasting the value, so it stays out of query history and out of `SHOW CREATE CONNECTION`.
 
 ```sql
 CREATE CONNECTION weather_mcp TYPE HTTP
@@ -221,9 +253,21 @@ call fails because of it.
 
 ## Things that will bite you
 
-**Outbound internet.** Both apps call `open-meteo.com` and `api.weather.gov`. If your workspace
-has an egress policy, those two hosts need allowlisting, and an egress change needs an app
-restart to take effect. Everything will look healthy and every weather call will fail.
+**Python is 3.11, and you cannot pin it.** Apps that install from `requirements.txt` get 3.11.
+Only a `pyproject.toml` and `uv.lock` setup can request a different version. The whole test suite
+passes on 3.11, so this repo is fine, but keep it in mind before reaching for newer syntax.
+
+**Secrets arrive in two different encodings.** `WorkspaceClient().secrets.get_secret()` returns a
+base64-encoded value that the caller has to decode, which is what `_contact_email()` and
+`lakebase.py` do. The other route, declaring a secret resource in `databricks.yml` and pulling it
+into `app.yaml` with `valueFrom`, injects the plaintext directly. If you ever switch a secret to
+the `valueFrom` route, delete the base64 decode for it or you will corrupt the value.
+
+**Outbound internet.** Both apps call `open-meteo.com` and `api.weather.gov`. This works by
+default. Egress restriction is an opt-in Enterprise-tier network policy, so most workspaces have
+nothing to configure. If yours does restrict egress, allowlist those two hosts and restart the
+apps, because an egress change needs a restart. Everything will look healthy and every weather
+call will fail until you do.
 
 **The 120 second proxy limit.** The Apps reverse proxy caps every request at 120 seconds and is
 not configurable. The 504 is generated at the proxy, so nothing appears in the app logs. Each
@@ -243,14 +287,29 @@ databricks apps stop weather-dashboard -p $P
 
 ## Not verified here
 
-Two things in this repo were not tested against a live workspace, because that needs your
-credentials.
+Four things could not be checked without your workspace. Treat them as the places to look first
+if something misbehaves.
 
-`query_log` attributes rows to a user by reading the `x-forwarded-user` and `x-forwarded-email`
-request headers. The documented header for app requests is `x-forwarded-access-token`, and the
-two identity headers come from the reference project rather than from current documentation. If
-they are not injected, `requested_by` is null and nothing else changes.
+**User attribution in the query log is probably not going to work.** `query_log` reads
+`x-forwarded-user` and `x-forwarded-email` to record who asked. Those header names come from the
+Day 3 reference project, and a search of the current Apps documentation turns up only one
+forwarded header, `x-forwarded-access-token`. They may exist and be undocumented, or they may not
+exist. If they do not, `requested_by` is null and nothing else changes, because the whole query
+log is optional. To make it work properly you would take the access token from
+`x-forwarded-access-token` and call the SCIM `Me` endpoint for the user's email, which costs one
+Databricks API call per tool call. That is a real cost for an optional feature, so it is not
+built.
 
-The exact `create-tool` behaviour for a `uc_connection` pointing at an MCP server is documented
-but was not run end to end here. If the agent cannot see the tools, the `http_request` check in
-step 3c is the place to start, because it isolates the connection from the agent.
+**Registering a Databricks App as an "external" MCP server is thinly documented.** The external
+MCP docs are written for third-party SaaS APIs. Your MCP server is an App in the same workspace,
+and Apps cannot be made public or bypass single sign-on, so the shared service principal has to
+hold `CAN_USE` on the app. That is mechanically sound but not a documented walkthrough. Test it
+early, and use the `http_request` check in step 3c to isolate the connection from the agent.
+
+**"Custom LLM" Agent Bricks is now labelled legacy.** If you follow the Day 3 course notes into
+that flow, expect it to look different. Custom Agents is the current path for a single
+tool-calling agent, and the supervisor agent commands above are the CLI route.
+
+**No documented ceiling on tool count.** Eight tools is almost certainly fine, since MCP catalogs
+are described as aggregating many more, but no doc states a limit, so this is an assumption
+rather than a fact.
