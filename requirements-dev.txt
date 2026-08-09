@@ -1,0 +1,7 @@
+# Test-only requirements. The mcp_server/ runtime deps are pulled in too,
+# since the tests import weather_client.py and weather_mcp_server.py directly
+# and those modules import fastmcp, requests, starlette, and friends at
+# module load time (no HTTP calls are made in tests, but the imports still
+# have to resolve).
+-r mcp_server/requirements.txt
+pytest>=8

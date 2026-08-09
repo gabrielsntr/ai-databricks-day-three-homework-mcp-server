@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather MCP dashboard</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --bg-panel: #ffffff;
+    --bg-inset: #eef0f3;
+    --text: #1b1f24;
+    --text-muted: #5b6270;
+    --border: #d7dbe1;
+    --accent: #205081;
+    --accent-text: #ffffff;
+    --ok: #1b6b3a;
+    --warn: #8a5a00;
+    --error: #a3231f;
+    --error-bg: #fbe9e8;
+    --focus: #205081;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --bg-panel: #1c1f24;
+      --bg-inset: #24282f;
+      --text: #e7e9ec;
+      --text-muted: #9aa1ac;
+      --border: #333944;
+      --accent: #6ea3e0;
+      --accent-text: #0e1013;
+      --ok: #6bcb8f;
+      --warn: #e0b84a;
+      --error: #e7827f;
+      --error-bg: #3a1f1e;
+      --focus: #6ea3e0;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px 16px 48px;
+  }
+
+  header {
+    padding: 4px 0 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+
+  h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+  }
+
+  header p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  h2 {
+    font-size: 15px;
+    margin: 0 0 12px;
+  }
+
+  section {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+
+  .search-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-end;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .field label {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  input[type="text"], input[type="date"], input[type="number"] {
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 7px 9px;
+    font-size: 14px;
+    min-width: 0;
+  }
+
+  input:focus, button:focus, table tbody tr:focus-within {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+  }
+
+  #location-input { width: 220px; max-width: 100%; }
+  #days-input { width: 70px; }
+  #date-input { width: 150px; }
+
+  button {
+    background: var(--accent);
+    color: var(--accent-text);
+    border: none;
+    border-radius: 4px;
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  button:hover { filter: brightness(1.08); }
+  button:disabled { opacity: 0.6; cursor: default; }
+
+  .error-banner {
+    display: none;
+    background: var(--error-bg);
+    color: var(--error);
+    border: 1px solid var(--error);
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-top: 12px;
+    font-size: 13px;
+  }
+
+  .error-banner.visible { display: block; }
+
+  .panels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+  }
+
+  .empty-state {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .kv-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 12px;
+    font-size: 14px;
+  }
+
+  .kv-grid dt { color: var(--text-muted); }
+  .kv-grid dd { margin: 0; }
+
+  .verdict {
+    display: inline-block;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+  }
+
+  .verdict.yes { color: var(--warn); }
+  .verdict.no { color: var(--ok); }
+
+  .score-band {
+    font-size: 24px;
+    font-weight: 600;
+  }
+
+  ul.plain-list {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    font-size: 13px;
+  }
+
+  ul.plain-list li { margin-bottom: 2px; }
+
+  .factor-list {
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 13px;
+  }
+
+  .factor-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .factor-list li:first-child { border-top: none; }
+
+  .factor-points {
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .scroll-x {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  .forecast-strip {
+    display: flex;
+    gap: 10px;
+    min-width: max-content;
+    padding-bottom: 4px;
+  }
+
+  .day-card {
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    min-width: 130px;
+    font-size: 13px;
+  }
+
+  .day-card .day-date {
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .day-card .day-conditions {
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 720px;
+    font-size: 13px;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  th {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  td.summary-cell {
+    white-space: normal;
+    min-width: 220px;
+  }
+
+  .status-pill {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 3px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    font-size: 12px;
+  }
+
+  .status-pill.ok { color: var(--ok); }
+  .status-pill.not_found, .status-pill.invalid_request { color: var(--warn); }
+  .status-pill.error, .status-pill.upstream_error { color: var(--error); }
+
+  .panel-footer {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  code {
+    background: var(--bg-inset);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Weather MCP dashboard</h1>
+    <p>Look up a location the same way the agent does, and check what it has been asking.</p>
+  </header>
+
+  <section id="search-section">
+    <h2>Look up a location</h2>
+    <form id="search-form" class="search-row">
+      <div class="field">
+        <label for="location-input">Location</label>
+        <input type="text" id="location-input" name="location" placeholder="Chicago, or 41.88,-87.63" required>
+      </div>
+      <div class="field">
+        <label for="date-input">Date for advice (optional)</label>
+        <input type="date" id="date-input" name="date">
+      </div>
+      <div class="field">
+        <label for="days-input">Forecast days</label>
+        <input type="number" id="days-input" name="days" value="5" min="1" max="16">
+      </div>
+      <button type="submit" id="search-button">Look up</button>
+    </form>
+    <div id="search-error" class="error-banner" role="alert"></div>
+  </section>
+
+  <section id="results-section" style="display: none;">
+    <div class="panels">
+      <div>
+        <h2>Current conditions</h2>
+        <div id="current-panel"><p class="empty-state">Run a lookup to see current conditions.</p></div>
+      </div>
+      <div>
+        <h2>Advice</h2>
+        <div id="advice-panel"><p class="empty-state">Run a lookup to see umbrella advice and a travel score.</p></div>
+      </div>
+    </div>
+
+    <h2 style="margin-top: 4px;">Forecast</h2>
+    <div class="scroll-x">
+      <div id="forecast-strip" class="forecast-strip">
+        <p class="empty-state">Run a lookup to see the forecast.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="recent-section">
+    <h2>Recent agent queries</h2>
+    <div id="recent-error" class="error-banner" role="alert"></div>
+    <div id="recent-body">
+      <p class="empty-state">Loading recent queries...</p>
+    </div>
+    <p class="panel-footer">Refreshes every 15 seconds.</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  async function fetchJSON(url) {
+    let response;
+    try {
+      response = await fetch(url);
+    } catch (networkErr) {
+      throw new Error("Could not reach the dashboard server: " + networkErr.message);
+    }
+    let body = null;
+    try {
+      body = await response.json();
+    } catch (parseErr) {
+      // fall through with body = null
+    }
+    if (!response.ok) {
+      const message = (body && (body.message || summarizeDetail(body.detail))) ||
+        ("Request failed with status " + response.status + ".");
+      throw new Error(message);
+    }
+    return body;
+  }
+
+  function summarizeDetail(detail) {
+    if (!detail) return null;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail.map(function (d) { return d.msg || JSON.stringify(d); }).join(" ");
+    }
+    return JSON.stringify(detail);
+  }
+
+  function showError(el, message) {
+    el.textContent = message;
+    el.classList.add("visible");
+  }
+
+  function clearError(el) {
+    el.textContent = "";
+    el.classList.remove("visible");
+  }
+
+  function fmt(value, unit) {
+    if (value === null || value === undefined) return "not reported";
+    return value + (unit || "");
+  }
+
+  function renderCurrent(current) {
+    const el = document.getElementById("current-panel");
+    const observed = current.observed_at ? "Observed at " + current.observed_at + " (" + current.timezone + ")" : "";
+    el.innerHTML =
+      "<dl class=\"kv-grid\">" +
+      "<dt>Conditions</dt><dd>" + current.conditions + "</dd>" +
+      "<dt>Temperature</dt><dd>" + fmt(current.temperature_c, " C") + " / " + fmt(current.temperature_f, " F") + "</dd>" +
+      "<dt>Feels like</dt><dd>" + fmt(current.feels_like_c, " C") + " / " + fmt(current.feels_like_f, " F") + "</dd>" +
+      "<dt>Humidity</dt><dd>" + fmt(current.humidity_pct, "%") + "</dd>" +
+      "<dt>Precipitation</dt><dd>" + fmt(current.precipitation_mm, " mm") + "</dd>" +
+      "<dt>Wind</dt><dd>" + fmt(current.wind_speed_kmh, " km/h") +
+        (current.wind_direction_compass ? " from " + current.wind_direction_compass : "") + "</dd>" +
+      "<dt>Pressure</dt><dd>" + fmt(current.pressure_hpa, " hPa") + "</dd>" +
+      "</dl><p class=\"panel-footer\">" + observed + "</p>";
+  }
+
+  function verdictClass(verdict) {
+    if (verdict === "yes") return "verdict yes";
+    if (verdict === "no") return "verdict no";
+    return "verdict";
+  }
+
+  function renderAdvice(payload) {
+    const el = document.getElementById("advice-panel");
+    const advice = payload.advice;
+    const rec = payload.recommendation;
+
+    let packing = "";
+    if (rec.packing_list && rec.packing_list.length) {
+      packing = "<ul class=\"plain-list\">" + rec.packing_list.map(function (i) { return "<li>" + i + "</li>"; }).join("") + "</ul>";
+    } else {
+      packing = "<p class=\"empty-state\">Nothing extra to pack for this day.</p>";
+    }
+
+    let factors = "";
+    if (rec.factors && rec.factors.length) {
+      factors = "<ul class=\"factor-list\">" + rec.factors.map(function (f) {
+        return "<li><span>" + f.why + "</span><span class=\"factor-points\">-" + f.points + "</span></li>";
+      }).join("") + "</ul>";
+    }
+
+    const alertsNote = payload.alerts_status === "unavailable"
+      ? "<p class=\"panel-footer\">Alerts could not be fetched, this score does not account for them.</p>"
+      : "";
+
+    el.innerHTML =
+      "<p><span class=\"" + verdictClass(advice.verdict) + "\">Umbrella: " + advice.verdict + "</span> " +
+      "<span class=\"panel-footer\">(" + advice.confidence + " confidence)</span></p>" +
+      "<p>" + advice.reason + "</p>" +
+      "<p class=\"score-band\">" + rec.score + "/100 <span class=\"panel-footer\" style=\"font-size:14px;\">(" + rec.band + ")</span></p>" +
+      "<p>" + rec.headline + "</p>" +
+      factors +
+      "<h2 style=\"font-size:13px; margin-top:12px;\">Packing list</h2>" +
+      packing +
+      alertsNote;
+  }
+
+  function renderForecast(forecast) {
+    const el = document.getElementById("forecast-strip");
+    if (!forecast.days || !forecast.days.length) {
+      el.innerHTML = "<p class=\"empty-state\">No forecast days were returned.</p>";
+      return;
+    }
+    el.innerHTML = forecast.days.map(function (day) {
+      return "<div class=\"day-card\">" +
+        "<div class=\"day-date\">" + day.date + "</div>" +
+        "<div class=\"day-conditions\">" + day.conditions + "</div>" +
+        "<div>" + fmt(day.temp_high_c, " C") + " / " + fmt(day.temp_low_c, " C") + "</div>" +
+        "<div>Rain chance: " + fmt(day.precipitation_chance_pct, "%") + "</div>" +
+        "<div>Wind: " + fmt(day.wind_max_kmh, " km/h") + "</div>" +
+        "</div>";
+    }).join("");
+  }
+
+  async function runLookup(location, date, days) {
+    const errorEl = document.getElementById("search-error");
+    const resultsSection = document.getElementById("results-section");
+    const button = document.getElementById("search-button");
+    clearError(errorEl);
+    button.disabled = true;
+    button.textContent = "Looking up...";
+    try {
+      const params = new URLSearchParams({ location: location });
+      const advicePromise = fetchJSON("/api/advice?" + params.toString() + (date ? "&date=" + encodeURIComponent(date) : ""));
+      const currentPromise = fetchJSON("/api/current?" + params.toString());
+      const forecastPromise = fetchJSON("/api/forecast?" + params.toString() + "&days=" + encodeURIComponent(days));
+
+      const [advice, current, forecast] = await Promise.all([advicePromise, currentPromise, forecastPromise]);
+
+      resultsSection.style.display = "";
+      renderCurrent(current);
+      renderAdvice(advice);
+      renderForecast(forecast);
+    } catch (err) {
+      showError(errorEl, err.message);
+    } finally {
+      button.disabled = false;
+      button.textContent = "Look up";
+    }
+  }
+
+  document.getElementById("search-form").addEventListener("submit", function (evt) {
+    evt.preventDefault();
+    const location = document.getElementById("location-input").value.trim();
+    const date = document.getElementById("date-input").value;
+    const days = document.getElementById("days-input").value || "5";
+    if (!location) return;
+    runLookup(location, date, days);
+  });
+
+  function statusPillClass(status) {
+    return "status-pill " + (status || "");
+  }
+
+  function renderRecent(payload) {
+    const errorEl = document.getElementById("recent-error");
+    const bodyEl = document.getElementById("recent-body");
+    clearError(errorEl);
+
+    if (!payload.logging_enabled) {
+      bodyEl.innerHTML =
+        "<p class=\"empty-state\">Lakebase logging is not configured for this deployment, so there is no query " +
+        "history to show. Set <code>LAKEBASE_URL</code> or <code>LAKEBASE_SECRET_SCOPE</code> / " +
+        "<code>LAKEBASE_SECRET_KEY</code> for the MCP server, and create the table with " +
+        "<code>mcp_server/schema_weather_queries.sql</code>, to start recording tool calls here.</p>";
+      return;
+    }
+
+    if (!payload.queries || !payload.queries.length) {
+      bodyEl.innerHTML =
+        "<p class=\"empty-state\">No agent queries have been logged yet. Ask the agent a weather question, " +
+        "or run a lookup above, then check back here.</p>";
+      return;
+    }
+
+    const rows = payload.queries.map(function (q) {
+      return "<tr>" +
+        "<td>" + (q.created_at || "") + "</td>" +
+        "<td>" + (q.tool_name || "") + "</td>" +
+        "<td>" + (q.location_query || q.resolved_label || "") + "</td>" +
+        "<td><span class=\"" + statusPillClass(q.status) + "\">" + (q.status || "") + "</span></td>" +
+        "<td>" + (q.verdict || "") + "</td>" +
+        "<td class=\"summary-cell\">" + (q.summary || "") + "</td>" +
+        "<td>" + (q.duration_ms !== null && q.duration_ms !== undefined ? q.duration_ms + " ms" : "") + "</td>" +
+        "<td>" + (q.requested_by || "") + "</td>" +
+        "</tr>";
+    }).join("");
+
+    bodyEl.innerHTML =
+      "<div class=\"scroll-x\"><table>" +
+      "<thead><tr><th>Time</th><th>Tool</th><th>Location</th><th>Status</th><th>Verdict</th>" +
+      "<th>Summary</th><th>Duration</th><th>Requested by</th></tr></thead>" +
+      "<tbody>" + rows + "</tbody></table></div>";
+  }
+
+  async function pollRecent() {
+    try {
+      const payload = await fetchJSON("/api/recent?limit=50");
+      renderRecent(payload);
+    } catch (err) {
+      showError(document.getElementById("recent-error"), err.message);
+    }
+  }
+
+  pollRecent();
+  setInterval(pollRecent, 15000);
+})();
+</script>
+</body>
+</html>
