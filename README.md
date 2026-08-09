@@ -192,38 +192,29 @@ psql "$LAKEBASE_URL" -f mcp_server/schema_weather_queries.sql
 Then make sure both apps can reach the same `database/lakebase-url` secret. A logging failure can
 never fail a tool call: the write is wrapped, and after the first failure the module stops trying.
 
-## Deploying to Databricks Apps
+## Deploying to Databricks
 
-Deploy two apps from the same Git folder, pointed at two different subfolders.
+[`DEPLOY.md`](DEPLOY.md) has the full walkthrough: deploying both apps with the CLI, registering
+the MCP server, and building the agent. The short version:
 
-1. Create a Git folder in your workspace for this repo.
-2. **MCP server.** Compute > Apps > Create app > Custom. Name it something like `weather-mcp`,
-   and point its source at the repo's `mcp_server/` subfolder so it picks up
-   `mcp_server/app.yaml`. Deploy it, then copy the app URL.
-3. **Dashboard.** Repeat, naming it something like `weather-dashboard` and pointing at
-   `dashboard/`. Open its URL and search for a city to confirm it works.
-4. Edit `NWS_CONTACT_EMAIL` in both `app.yaml` files to a real address before you deploy. The NWS
-   blocks callers that do not identify themselves.
+```bash
+databricks sync mcp_server "/Workspace/Users/$U/weather-mcp" -p $P
+databricks apps create weather-mcp -p $P
+databricks apps deploy weather-mcp --source-code-path "/Workspace/Users/$U/weather-mcp" -p $P
+```
 
-### Register the MCP server
+Repeat for `dashboard/`. Syncing one folder at a time is what puts each app's `app.yaml` at the
+root of its own source path.
 
-Follow [Connect agents to external MCPs](https://docs.databricks.com/aws/en/agents/mcp-tools/connect-external):
+An Agent Bricks agent does not take a URL. It takes a Unity Catalog HTTP connection created with
+`is_mcp_connection 'true'`, which authenticates to the app over OAuth as a service principal, and
+that connection is then attached to the agent as a `uc_connection` tool. `DEPLOY.md` walks through
+the service principal, the secret, the `CREATE CONNECTION` statement, and a `http_request` call
+that proves the connection can list all eight tools before you involve the agent at all.
 
-1. Go to **AI Gateway** > **MCPs** > **Add MCP**.
-2. Paste the `weather-mcp` app URL with `/mcp` appended, as a streamable HTTP endpoint. Use no
-   trailing slash: `/mcp/` answers with a 307 redirect, and not every gateway follows a redirect
-   on a POST.
-3. Name it `weather-forecast` and save. Databricks introspects the server and lists all eight
-   tools.
-4. Grant the agent access to the MCP server if you are prompted for Unity Catalog permissions.
-
-### Build the agent
-
-1. **Agents** > **Agent Bricks** > **Create agent**, and pick **Custom LLM**.
-2. Under **Tools**, add the `weather-forecast` MCP server. Enable all eight tools.
-3. Paste the contents of [`agent/system_prompt.md`](agent/system_prompt.md) into the
-   instructions field, starting below the `---` marker.
-4. Deploy the agent and try the questions in [`agent/transcripts.md`](agent/transcripts.md).
+Set `NWS_CONTACT_EMAIL` in both `app.yaml` files to a real address first. The National Weather
+Service blocks callers that do not identify themselves, and this is the one misconfiguration that
+degrades quietly instead of failing.
 
 ## Files
 

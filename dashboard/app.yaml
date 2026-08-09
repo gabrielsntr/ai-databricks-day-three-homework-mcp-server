@@ -1,11 +1,8 @@
+# Databricks Apps reads two keys here: command and env. Dependencies are not declared in this
+# file; the runtime installs requirements.txt from the app's source directory on its own.
 command:
   - "python"
   - "app.py"
-
-resources:
-  - name: requirements
-    source:
-      path: ./requirements.txt
 
 env:
   - name: APP_NAME
