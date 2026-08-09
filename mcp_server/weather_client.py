@@ -137,6 +137,24 @@ _COMPASS_POINTS = [
     "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
 ]
 
+# Indexed by date.weekday() (Monday=0 .. Sunday=6). A fixed table, not
+# strftime("%A"), because strftime is locale-sensitive and the agent that
+# reads these payloads needs an English name no matter what locale the
+# server process happens to be running under.
+_WEEKDAY_NAMES = (
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+)
+
+
+def _weekday_for(date_str: str | None) -> str | None:
+    """English weekday name (e.g. "Tuesday") for a YYYY-MM-DD string, or None if it is missing or malformed."""
+    if not date_str:
+        return None
+    try:
+        return _WEEKDAY_NAMES[date.fromisoformat(date_str).weekday()]
+    except (ValueError, TypeError):
+        return None
+
 
 def describe_weather_code(code: int | None) -> str:
     """Translate a WMO weather code into a short human-readable phrase."""
@@ -392,9 +410,15 @@ def current_conditions(place: dict, *, deadline: float | None = None) -> dict:
     weather_code = current.get("weather_code")
     is_day = current.get("is_day")
 
+    observed_at = current.get("time")
+    # observed_at is a local timestamp string like "2026-08-09T14:00"; the
+    # date part is everything before the "T".
+    observed_date = observed_at.split("T", 1)[0] if isinstance(observed_at, str) else None
+
     return {
         "location": place,
-        "observed_at": current.get("time"),
+        "observed_at": observed_at,
+        "weekday": _weekday_for(observed_date),
         "timezone": data.get("timezone", place.get("timezone")),
         "temperature_c": temp_c,
         "temperature_f": _c_to_f(temp_c),
@@ -452,6 +476,7 @@ def daily_forecast(place: dict, days: int, *, deadline: float | None = None) -> 
         wind_gust_max_kmh = _daily_field(daily, "wind_gusts_10m_max", i)
         days_out.append({
             "date": day_date,
+            "weekday": _weekday_for(day_date),
             "weather_code": weather_code,
             "conditions": describe_weather_code(weather_code),
             "temp_high_c": temp_high_c,
@@ -617,6 +642,7 @@ def historical_daily(place: dict, start_date: str, end_date: str, *, deadline: f
         wind_max_kmh = _daily_field(daily, "wind_speed_10m_max", i)
         days_out.append({
             "date": day_date,
+            "weekday": _weekday_for(day_date),
             "temp_high_c": temp_high_c,
             "temp_high_f": _c_to_f(temp_high_c),
             "temp_low_c": temp_low_c,

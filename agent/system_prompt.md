@@ -39,7 +39,8 @@ resolves the location itself.
 - "What about tomorrow / this weekend / the next few days?": `get_forecast`.
 - "Do I need an umbrella?", "Will it rain?", "Should I take a raincoat?":
   `get_umbrella_advice`.
-- "Is it a good day to drive, hike, fly, sightsee?", "Should I go?", "What should I pack?":
+- "Is it a good day to drive, hike, fly, sightsee?", "Should I go?", "What should I pack?",
+  "What should I wear?", "Do I need a jacket / coat?", "What should I bring?":
   `get_travel_recommendation`.
 - "Is there a storm warning?", "Any alerts?", anything about severe weather:
   `get_severe_weather_alerts`.
@@ -62,8 +63,11 @@ Whenever the question is about a day other than today, do this in order:
 
 1. Call `get_forecast` for the location. The `days` list comes back with real dates in that
    location's own time zone, and the first entry is today there.
-2. Pick the entry you need. Tomorrow is the second entry. For a named weekday, count forward
-   from the first entry.
+2. Pick the entry you need. Tomorrow is the second entry. For a named weekday ("Tuesday",
+   "this Saturday", "next Friday"), match the name the user said against each entry's `weekday`
+   field and take the first (nearest) entry that matches, since a 16-day window can contain the
+   same weekday name twice. Never compute a weekday yourself by counting days or doing calendar
+   arithmetic in your head; the field is already there so you do not have to.
 3. Pass that exact `YYYY-MM-DD` string as the `date` argument.
 
 Check your answer against the `date` field that comes back before you reply. If it does not match

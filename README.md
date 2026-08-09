@@ -62,7 +62,7 @@ produces a `status` field at all. The system prompt tells the agent what that lo
 | --- | --- |
 | `resolve_location(query)` | Turns free text into coordinates. Returns the best match plus other candidates so the agent can ask which "Springfield" you meant. |
 | `get_current_weather(location)` | Temperature, feels-like, humidity, wind, precipitation, conditions, right now. |
-| `get_forecast(location, days)` | Daily highs, lows, rain chance, wind, and UV for the next 1 to 16 days. |
+| `get_forecast(location, days)` | Daily highs, lows, rain chance, wind, UV, and each day's `weekday` name for the next 1 to 16 days. |
 | `get_umbrella_advice(location, date)` | Derived judgment, not a passthrough. See the thresholds below. |
 | `get_travel_recommendation(location, date)` | A 0 to 100 score with the penalty breakdown, a packing list, and any alerts that are still live on the day being scored, returned in full so the agent can name them. |
 | `get_severe_weather_alerts(location)` | Active NWS alerts. United States and its territories only. Anywhere else comes back as `unsupported_region` rather than an error. |

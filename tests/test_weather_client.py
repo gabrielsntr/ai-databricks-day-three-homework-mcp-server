@@ -201,6 +201,7 @@ def test_current_conditions_parses_metric_and_imperial_fields(monkeypatch):
     result = weather_client.current_conditions(_place())
 
     assert result["observed_at"] == "2026-08-09T14:00"
+    assert result["weekday"] == "Sunday"
     assert result["timezone"] == "America/Chicago"
     assert result["temperature_c"] == 27.4
     assert result["temperature_f"] == 81.3
@@ -258,6 +259,7 @@ def test_daily_forecast_parses_metric_and_imperial_fields(monkeypatch):
     day0 = forecast["days"][0]
 
     assert day0["date"] == "2026-08-10"
+    assert day0["weekday"] == "Monday"
     assert day0["weather_code"] == 61
     assert day0["conditions"] == "Slight rain"
     assert day0["temp_high_c"] == 28.0
@@ -280,6 +282,7 @@ def test_daily_forecast_tolerates_null_entries_without_raising(monkeypatch):
     day1 = forecast["days"][1]
 
     assert day1["date"] == "2026-08-11"
+    assert day1["weekday"] == "Tuesday"
     assert day1["weather_code"] is None
     assert day1["conditions"] == "Unknown"
     assert day1["temp_high_c"] is None
@@ -348,6 +351,97 @@ def test_historical_daily_rejects_malformed_date_string(monkeypatch):
     with pytest.raises(InvalidRequestError):
         weather_client.historical_daily(_place(), "not-a-date", "2024-01-01")
     assert transport.call_count == 0
+
+
+def test_historical_daily_days_carry_weekday(monkeypatch):
+    payload = {
+        "timezone": "America/Chicago",
+        "daily": {
+            "time": ["2026-08-09", "2026-08-10"],
+            "temperature_2m_max": [30.0, 29.0],
+            "temperature_2m_min": [20.0, 19.0],
+            "precipitation_sum": [0.0, 1.0],
+            "wind_speed_10m_max": [10.0, 12.0],
+        },
+    }
+    _install_transport(monkeypatch, [FakeResponse(200, payload)])
+
+    end = (date.today() - timedelta(days=5)).isoformat()
+    start = (date.today() - timedelta(days=6)).isoformat()
+    history = weather_client.historical_daily(_place(), start, end)
+
+    assert history["days"][0]["date"] == "2026-08-09"
+    assert history["days"][0]["weekday"] == "Sunday"
+    assert history["days"][1]["date"] == "2026-08-10"
+    assert history["days"][1]["weekday"] == "Monday"
+
+
+# ---------------------------------------------------------------------------
+# weekday
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "day_date, expected",
+    [
+        ("2026-08-09", "Sunday"),
+        ("2026-08-10", "Monday"),  # weekday() == 0, where an off-by-one indexing bug would hide
+        ("2026-08-11", "Tuesday"),  # the exact date from the reported "next Tuesday" bug
+        ("2026-08-12", "Wednesday"),  # the wrong date the agent answered with in that bug
+        ("2026-08-14", "Friday"),
+        ("2024-02-29", "Thursday"),  # a leap day, in case of a date-arithmetic shortcut
+    ],
+)
+def test_weekday_for_known_dates(day_date, expected):
+    assert weather_client._weekday_for(day_date) == expected
+
+
+@pytest.mark.parametrize("bad_value", [None, "", "not-a-date", "2026-13-40", "2026/08/09", 20260809])
+def test_weekday_for_malformed_or_missing_date_returns_none(bad_value):
+    assert weather_client._weekday_for(bad_value) is None
+
+
+def test_weekday_for_matches_explicit_english_name_table_regardless_of_locale():
+    # strftime("%A") would be locale-sensitive; _weekday_for must not be. Assert
+    # against the explicit name table rather than depending on a locale change.
+    for offset, expected_name in enumerate(weather_client._WEEKDAY_NAMES):
+        day_date = (date(2026, 8, 10) + timedelta(days=offset)).isoformat()  # 2026-08-10 is a Monday
+        assert weather_client._weekday_for(day_date) == expected_name
+
+
+def test_daily_forecast_tolerates_missing_date_in_time_array(monkeypatch):
+    payload = {
+        "timezone": "America/Chicago",
+        "daily": {
+            "time": [None],
+            "weather_code": [61],
+            "temperature_2m_max": [28.0],
+            "temperature_2m_min": [18.0],
+            "apparent_temperature_max": [29.0],
+            "precipitation_sum": [3.2],
+            "precipitation_probability_max": [55],
+            "wind_speed_10m_max": [20.0],
+            "wind_gusts_10m_max": [35.0],
+            "uv_index_max": [6.2],
+            "sunrise": ["2026-08-10T05:58"],
+            "sunset": ["2026-08-10T20:07"],
+        },
+    }
+    _install_transport(monkeypatch, [FakeResponse(200, payload)])
+
+    forecast = weather_client.daily_forecast(_place(), 1)
+
+    assert forecast["days"][0]["date"] is None
+    assert forecast["days"][0]["weekday"] is None
+
+
+def test_current_conditions_tolerates_missing_time(monkeypatch):
+    payload = {"timezone": "America/Chicago", "current": {"temperature_2m": 27.4}}
+    _install_transport(monkeypatch, [FakeResponse(200, payload)])
+
+    result = weather_client.current_conditions(_place())
+
+    assert result["observed_at"] is None
+    assert result["weekday"] is None
 
 
 # ---------------------------------------------------------------------------

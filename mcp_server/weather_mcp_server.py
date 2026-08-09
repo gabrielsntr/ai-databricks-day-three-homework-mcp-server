@@ -199,9 +199,9 @@ def get_current_weather(location: str) -> dict:
 
     Returns:
         A dict with status and, on success, the current-conditions payload
-        (temperature_c/f, feels_like_c/f, humidity_pct, precipitation_mm/in,
-        wind_speed_kmh/mph, wind_direction_deg/compass, pressure_hpa,
-        is_day, weather_code, conditions).
+        (observed_at, weekday, temperature_c/f, feels_like_c/f, humidity_pct,
+        precipitation_mm/in, wind_speed_kmh/mph, wind_direction_deg/compass,
+        pressure_hpa, is_day, weather_code, conditions).
     """
     def body():
         # This tool makes two upstream calls (resolve, then current
@@ -227,8 +227,8 @@ def get_forecast(location: str, days: int = 5) -> dict:
 
     Returns:
         A dict with status and, on success, location, timezone, and a
-        `days` list of daily forecast dicts (temp_high/low_c/f, conditions,
-        precipitation, wind, uv_index_max, sunrise, sunset).
+        `days` list of daily forecast dicts (date, weekday, temp_high/low_c/f,
+        conditions, precipitation, wind, uv_index_max, sunrise, sunset).
     """
     def body():
         deadline = weather_client.new_deadline()
