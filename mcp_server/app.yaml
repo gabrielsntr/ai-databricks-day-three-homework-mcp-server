@@ -7,8 +7,15 @@ command:
 env:
   - name: APP_NAME
     value: "weather-mcp-server"
+  # The National Weather Service wants a contact address in the User-Agent header. It is read
+  # from a Databricks secret so no address lands in this repo. The app's service principal needs
+  # READ on the scope. NWS_CONTACT_EMAIL is only the fallback if the lookup fails.
+  - name: NWS_CONTACT_SECRET_SCOPE
+    value: "weather-mcp"
+  - name: NWS_CONTACT_SECRET_KEY
+    value: "nws-contact-email"
   - name: NWS_CONTACT_EMAIL
-    value: "gabriel@talentify.io"
+    value: "change-me@example.com"
   - name: LAKEBASE_SECRET_SCOPE
     value: "database"
   - name: LAKEBASE_SECRET_KEY
